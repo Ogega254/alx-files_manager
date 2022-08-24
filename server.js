@@ -1,13 +1,12 @@
-/* eslint-disable */
-const express = require('express');
-import router from './routes/index';
+import express from 'express';
+import startServer from './libs/boot';
+import injectRoutes from './routes';
+import injectMiddlewares from './libs/middlewares';
 
-const app = express();
-app.use(router);
-app.use(express.json());
+const server = express();
 
-const port = process.env.PORT || 5000;
+injectMiddlewares(server);
+injectRoutes(server);
+startServer(server);
 
-app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
-});
+export default server;
