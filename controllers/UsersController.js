@@ -1,40 +1,59 @@
-/* eslint-disable import/no-named-as-default */
-import sha1 from 'sha1';
-import Queue from 'bull/lib/queue';
+/* eslint-disable */
+import { ObjectId } from 'mongodb';
 import dbClient from '../utils/db';
+import redisClient from '../utils/redis';
 
-const userQueue = new Queue('email sending');
+const sha1 = require('sha1');
 
-export default class UsersController {
-  static async postNew(req, res) {
-    const email = req.body ? req.body.email : null;
-    const password = req.body ? req.body.password : null;
+// POST /users should create a new user in DB
+export async function postNew(req, res) {
 
-    if (!email) {
-      res.status(400).json({ error: 'Missing email' });
-      return;
+  try {
+    const userEmail = req.body.email;
+    if (!userEmail) {
+      return res.status(400).send({
+        error: 'Missing email',
+      });
     }
-    if (!password) {
-      res.status(400).json({ error: 'Missing password' });
-      return;
+
+    const userPassword = req.body.password;
+    if (!userPassword) {
+      return res.status(400).send({
+        error: 'Missing password',
+      });
     }
-    const user = await (await dbClient.usersCollection()).findOne({ email });
-
-    if (user) {
-      res.status(400).json({ error: 'Already exist' });
-      return;
+    
+    let existingEmail = await dbClient.db.collection('users').findOne({ email: userEmail });
+    if (existingEmail) {
+      return res.status(400).send({
+        error: 'Already exist',
+      });
     }
-    const insertionInfo = await (await dbClient.usersCollection())
-      .insertOne({ email, password: sha1(password) });
-    const userId = insertionInfo.insertedId.toString();
 
-    userQueue.add({ userId });
-    res.status(201).json({ email, id: userId });
-  }
+    let userId;
+    const hashedPw = sha1(userPassword);
+    const newUser = {
+      email: userEmail,
+      password: hashedPw,
+    };
 
-  static async getMe(req, res) {
-    const { user } = req;
+    try {
+      await dbClient.db.collection('users').insertOne(newUser, (err) => {
+        userId = newUser._id;
+        return res.status(201).send({
+          email: userEmail,
+          id: userId,
+        });
+      });
+    } catch (err) {
+      return res.status(err.status).send({
+        'error': err,
+      });
+    }
 
-    res.status(200).json({ email: user.email, id: user._id.toString() });
+  } catch (error) {
+    return res.status(500).send({
+      error: 'Server error',
+    });
   }
 }
